@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Galeria de Imagens</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --gap: 8px;
+    --pad: 10px;
+    --bg: #1e1e24;
+    --panel: #2a2a34;
+    --accent: #4a90e2;
+    --danger: #e25c5c;
+    --ok: #4ad27a;
+    --card-min: 140px;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: #e8e8e8;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--panel);
+    padding: var(--pad);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    border-bottom: 1px solid #444;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 1rem; font-weight: 600; margin-right: auto; }
+  .btn {
+    background: #3a3a46;
+    color: #e8e8e8;
+    border: 1px solid #555;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.15s, filter 0.15s;
+  }
+  .btn:hover { background: #4a4a58; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.15); }
+  .btn.danger { background: var(--danger); border-color: var(--danger); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #toolbar-info { font-size: 0.8rem; opacity: 0.7; }
+
+  /* Controle de zoom */
+  .zoom-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #1a1a20;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+  }
+  .zoom-control input[type="range"] {
+    width: 110px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  #zoom-label {
+    font-family: ui-monospace, monospace;
+    min-width: 42px;
+    text-align: right;
+    opacity: 0.75;
+  }
+
+  /* Grid */
+  #gallery {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--pad);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 140px), 1fr));
+    gap: var(--gap);
+    align-content: start;
+  }
+  #gallery.dragover { outline: 2px dashed var(--accent); outline-offset: -8px; }
+
+  /* Card */
+  .card {
+    background: var(--panel);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #3a3a46;
+    position: relative;
+    transition: border-color 0.15s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card .img-wrap {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #151519;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: zoom-in;
+  }
+  .card .img-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;      /* nunca distorce */
+    display: block;
+    transition: transform 0.35s ease;
+    transform-origin: center;
+  }
+  .card:hover .img-wrap img {
+    transform: scale(1.08);   /* efeito lupa suave — proporcional */
+  }
+
+  /* Modo capa: preenche o card, ainda sem distorcer (só recorta) */
+  body.mode-cover .card .img-wrap img { object-fit: cover; }
+  body.mode-cover .card:hover .img-wrap img { transform: scale(1.12); }
+
+  .card .meta {
+    padding: 4px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    font-size: 0.75rem;
+  }
+  .tag {
+    background: var(--accent);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-family: ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.5px;
+  }
+  .card .actions {
+    display: flex;
+    gap: 3px;
+  }
+  .icon-btn {
+    background: transparent;
+    border: none;
+    color: #bbb;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+  .icon-btn:hover { background: #444; color: #fff; }
+  .icon-btn.del:hover { background: var(--danger); }
+
+  /* Modal (add/edit) */
+  .modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal.open { display: flex; }
+  .modal-box {
+    background: var(--panel);
+    border-radius: 10px;
+    padding: 20px;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  .modal-box h2 { font-size: 1rem; margin-bottom: 12px; }
+  .modal-box label { display: block; font-size: 0.8rem; margin: 8px 0 4px; opacity: 0.8; }
+  .modal-box input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #555;
+    background: #1a1a20;
+    color: #e8e8e8;
+    font-family: ui-monospace, monospace;
+    font-size: 1rem;
+    text-transform: lowercase;
+  }
+  .modal-box input.error { border-color: var(--danger); }
+  .modal-box .hint { font-size: 0.7rem; opacity: 0.6; margin-top: 4px; }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .preview {
+    width: 100%;
+    max-height: 160px;
+    object-fit: contain;
+    background: #151519;
+    border-radius: 6px;
+    margin-top: 8px;
+  }
+
+  /* Lightbox */
+  #lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 150;
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-out;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img {
+    max-width: 95vw;
+    max-height: 95vh;
+    object-fit: contain;
+    border-radius: 6px;
+    box-shadow: 0 0 60px rgba(0,0,0,0.6);
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--ok);
+    color: #06210f;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    opacity: 0;
+    transition: all 0.25s;
+    z-index: 200;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.err { background: var(--danger); color: #fff; }
+
+  #empty {
+    text-align: center;
+    padding: 40px 20px;
+    opacity: 0.5;
+    grid-column: 1 / -1;
+    font-size: 0.9rem;
+  }
+
+  /* Mobile: esconde o slider se faltar espaço */
+  @media (max-width: 640px) {
+    .zoom-control { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🖼️ Galeria</h1>
+  <span id="toolbar-info">0 imagens</span>
+
+  <div class="zoom-control" title="Tamanho das fotos">
+    <span>🔍</span>
+    <input type="range" id="zoom-range" min="100" max="260" step="10" value="140">
+    <span id="zoom-label">140px</span>
+  </div>
+
+  <button class="btn" id="btn-fit" title="Alternar entre caber inteira e preencher o card">⤢ Caber</button>
+  <button class="btn primary" id="btn-add">+ Adicionar</button>
+  <button class="btn" id="btn-export">⬇ Exportar</button>
+  <button class="btn" id="btn-import">⬆ Importar</button>
+  <input type="file" id="file-import" accept="application/json" hidden>
+  <input type="file" id="file-add" accept="image/*" multiple hidden>
+</header>
+
+<main id="gallery">
+  <div id="empty">Nenhuma imagem cadastrada.<br>Clique em <b>Adicionar</b> ou arraste imagens aqui.</div>
+</main>
+
+<!-- Modal add/edit -->
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <h2 id="modal-title">Adicionar imagem</h2>
+    <img id="modal-preview" class="preview" alt="" hidden>
+    <label for="tag-input">Etiqueta (letra minúscula + 2 dígitos: ex. <code>a34</code>)</label>
+    <input type="text" id="tag-input" maxlength="3" placeholder="a00" autocomplete="off">
+    <div class="hint">Formato obrigatório: ^[a-z][0-9]{2}$</div>
+    <div class="modal-actions">
+      <button class="btn" id="modal-cancel">Cancelar</button>
+      <button class="btn primary" id="modal-save">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox">
+  <img id="lightbox-img" alt="">
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  const STORAGE_KEY = 'gallery_images_v1';
+  const ZOOM_KEY    = 'gallery_zoom_v1';
+  const FIT_KEY     = 'gallery_fit_v1';
+  const TAG_RE      = /^[a-z][0-9]{2}$/;
+
+  // ---------- Estado ----------
+  /** @type {Array<{id:string, tag:string, data:string, createdAt:number}>} */
+  let items = [];
+
+  // ---------- Elementos ----------
+  const $gallery = document.getElementById('gallery');
+  const $empty = document.getElementById('empty');
+  const $info = document.getElementById('toolbar-info');
+  const $modal = document.getElementById('modal');
+  const $modalTitle = document.getElementById('modal-title');
+  const $modalPreview = document.getElementById('modal-preview');
+  const $tagInput = document.getElementById('tag-input');
+  const $toast = document.getElementById('toast');
+  const $zoom = document.getElementById('zoom-range');
+  const $zoomLabel = document.getElementById('zoom-label');
+  const $btnFit = document.getElementById('btn-fit');
+  const $lightbox = document.getElementById('lightbox');
+  const $lightboxImg = document.getElementById('lightbox-img');
+
+  // ---------- Storage ----------
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      items = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(items)) items = [];
+    } catch (e) {
+      console.error('Falha ao carregar storage:', e);
+      items = [];
+    }
+  }
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    } catch (e) {
+      toast('Erro ao salvar (storage cheio?)', true);
+      console.error(e);
+    }
+  }
+
+  // ---------- Utilidades ----------
+  function toast(msg, err) {
+    $toast.textContent = msg;
+    $toast.classList.toggle('err', !!err);
+    $toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => $toast.classList.remove('show'), 2200);
+  }
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function tagExists(tag, ignoreId) {
+    return items.some(it => it.tag === tag && it.id !== ignoreId);
+  }
+  function fileToDataURL(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+
+  // ---------- Render ----------
+  function render() {
+    $gallery.querySelectorAll('.card').forEach(n => n.remove());
+
+    $empty.style.display = items.length === 0 ? 'block' : 'none';
+    $info.textContent = `${items.length} imagem${items.length === 1 ? '' : 's'}`;
+
+    const frag = document.createDocumentFragment();
+    for (const it of items) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.id = it.id;
+
+      const wrap = document.createElement('div');
+      wrap.className = 'img-wrap';
+      const img = document.createElement('img');
+      img.src = it.data;
+      img.alt = it.tag;
+      img.loading = 'lazy';
+      wrap.appendChild(img);
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+
+      const tagEl = document.createElement('span');
+      tagEl.className = 'tag';
+      tagEl.textContent = it.tag;
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'icon-btn';
+      editBtn.title = 'Editar etiqueta';
+      editBtn.textContent = '✏️';
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openModal(it.id);
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'icon-btn del';
+      delBtn.title = 'Excluir';
+      delBtn.textContent = '🗑️';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeItem(it.id);
+      });
+
+      actions.append(editBtn, delBtn);
+      meta.append(tagEl, actions);
+      card.append(wrap, meta);
+      frag.appendChild(card);
+    }
+    $gallery.appendChild(frag);
+  }
+
+  // ---------- CRUD ----------
+  function removeItem(id) {
+    const it = items.find(x => x.id === id);
+    if (!it) return;
+    if (!confirm(`Excluir imagem "${it.tag}"?`)) return;
+    items = items.filter(x => x.id !== id);
+    save();
+    render();
+    toast('Imagem excluída');
+  }
+
+  // ---------- Modal ----------
+  let editingId = null;
+  let pendingData = null;
+
+  function openModal(id, dataUrl) {
+    editingId = id || null;
+    pendingData = dataUrl || null;
+
+    if (id) {
+      const it = items.find(x => x.id === id);
+      if (!it) return;
+      $modalTitle.textContent = 'Editar etiqueta';
+      $tagInput.value = it.tag;
+      $modalPreview.src = it.data;
+      $modalPreview.hidden = false;
+    } else {
+      $modalTitle.textContent = 'Adicionar imagem';
+      $tagInput.value = '';
+      if (dataUrl) {
+        $modalPreview.src = dataUrl;
+        $modalPreview.hidden = false;
+      } else {
+        $modalPreview.hidden = true;
+        $modalPreview.removeAttribute('src');
+      }
+    }
+    $tagInput.classList.remove('error');
+    $modal.classList.add('open');
+    setTimeout(() => $tagInput.focus(), 50);
+  }
+
+  function closeModal() {
+    $modal.classList.remove('open');
+    editingId = null;
+    pendingData = null;
+    $tagInput.value = '';
+  }
+
+  function saveModal() {
+    const raw = $tagInput.value.trim().toLowerCase();
+    if (!TAG_RE.test(raw)) {
+      $tagInput.classList.add('error');
+      toast('Etiqueta inválida. Use ex.: a34', true);
+      return;
+    }
+    if (tagExists(raw, editingId)) {
+      $tagInput.classList.add('error');
+      toast('Já existe imagem com essa etiqueta', true);
+      return;
+    }
+
+    if (editingId) {
+      const it = items.find(x => x.id === editingId);
+      if (it) it.tag = raw;
+      save();
+      render();
+      toast('Etiqueta atualizada');
+    } else {
+      if (!pendingData) {
+        toast('Nenhuma imagem selecionada', true);
+        return;
+      }
+      items.push({
+        id: uid(),
+        tag: raw,
+        data: pendingData,
+        createdAt: Date.now()
+      });
+      save();
+      render();
+      toast('Imagem adicionada');
+    }
+    closeModal();
+  }
+
+  $tagInput.addEventListener('input', () => {
+    $tagInput.value = $tagInput.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 3);
+    $tagInput.classList.remove('error');
+  });
+  $tagInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveModal();
+    if (e.key === 'Escape') closeModal();
+  });
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', saveModal);
+  $modal.addEventListener('click', (e) => { if (e.target === $modal) closeModal(); });
+
+  // ---------- Adicionar (arquivo) ----------
+  const $fileAdd = document.getElementById('file-add');
+  document.getElementById('btn-add').addEventListener('click', () => $fileAdd.click());
+  $fileAdd.addEventListener('change', async () => {
+    const files = Array.from($fileAdd.files || []);
+    $fileAdd.value = '';
+    for (const f of files) {
+      if (!f.type.startsWith('image/')) continue;
+      const data = await fileToDataURL(f);
+      openModal(null, data);
+      break; // adiciona um por vez para definir etiqueta
+    }
+  });
+
+  // ---------- Drag & Drop ----------
+  $gallery.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    $gallery.classList.add('dragover');
+  });
+  $gallery.addEventListener('dragleave', () => $gallery.classList.remove('dragover'));
+  $gallery.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    $gallery.classList.remove('dragover');
+    const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
+    if (files.length === 0) return;
+    const data = await fileToDataURL(files[0]);
+    openModal(null, data);
+  });
+
+  // ---------- Zoom & Modo Capa ----------
+  function applyZoom(px) {
+    px = Math.min(260, Math.max(100, px || 140));
+    document.documentElement.style.setProperty('--card-min', px + 'px');
+    $zoomLabel.textContent = px + 'px';
+    $zoom.value = px;
+    localStorage.setItem(ZOOM_KEY, px);
+  }
+
+  function applyFit(mode) {
+    document.body.classList.toggle('mode-cover', mode === 'cover');
+    $btnFit.textContent = mode === 'cover' ? '⤢ Capa' : '⤢ Caber';
+    $btnFit.classList.toggle('primary', mode === 'cover');
+    localStorage.setItem(FIT_KEY, mode);
+  }
+
+  applyZoom(parseInt(localStorage.getItem(ZOOM_KEY) || '140', 10));
+  applyFit(localStorage.getItem(FIT_KEY) || 'contain');
+
+  $zoom.addEventListener('input', () => applyZoom(parseInt($zoom.value, 10)));
+
+  $btnFit.addEventListener('click', () => {
+    const cur = localStorage.getItem(FIT_KEY) || 'contain';
+    const next = cur === 'cover' ? 'contain' : 'cover';
+    applyFit(next);
+    toast(next === 'cover' ? 'Modo: preencher card (capa)' : 'Modo: caber inteira');
+  });
+
+  // ---------- Lightbox ----------
+  $gallery.addEventListener('click', (e) => {
+    const wrap = e.target.closest('.img-wrap');
+    if (!wrap) return;
+    const card = wrap.closest('.card');
+    if (!card) return;
+    const it = items.find(x => x.id === card.dataset.id);
+    if (!it) return;
+    $lightboxImg.src = it.data;
+    $lightboxImg.alt = it.tag;
+    $lightbox.classList.add('open');
+  });
+  $lightbox.addEventListener('click', () => {
+    $lightbox.classList.remove('open');
+    $lightboxImg.removeAttribute('src');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if ($lightbox.classList.contains('open')) {
+        $lightbox.classList.remove('open');
+        $lightboxImg.removeAttribute('src');
+      }
+    }
+  });
+
+  // ---------- Export / Import ----------
+  document.getElementById('btn-export').addEventListener('click', () => {
+    if (items.length === 0) { toast('Nada para exportar', true); return; }
+    const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `galeria-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Exportado');
+  });
+
+  const $fileImport = document.getElementById('file-import');
+  document.getElementById('btn-import').addEventListener('click', () => $fileImport.click());
+  $fileImport.addEventListener('change', async () => {
+    const f = $fileImport.files?.[0];
+    $fileImport.value = '';
+    if (!f) return;
+    try {
+      const text = await f.text();
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) throw new Error('Formato inválido');
+      const valid = data.filter(it =>
+        it && typeof it.id === 'string' &&
+        typeof it.tag === 'string' && TAG_RE.test(it.tag) &&
+        typeof it.data === 'string'
+      );
+      if (valid.length === 0) throw new Error('Nenhum item válido');
+      const mode = items.length > 0
+        ? (confirm(`Importar ${valid.length} item(ns).\n\nOK = substituir toda a galeria\nCancelar = mesclar (ignorando etiquetas duplicadas)`) ? 'replace' : 'merge')
+        : 'replace';
+
+      if (mode === 'replace') {
+        items = valid;
+      } else {
+        for (const it of valid) {
+          if (!tagExists(it.tag) && !items.some(x => x.id === it.id)) {
+            items.push(it);
+          }
+        }
+      }
+      save();
+      render();
+      toast(`Importado(s) ${valid.length} item(ns)`);
+    } catch (e) {
+      console.error(e);
+      toast('Arquivo inválido: ' + e.message, true);
+    }
+  });
+
+  // ---------- Init ----------
+  load();
+  render();
+  window.addEventListener('beforeunload', save);
+})();
+</script>
+</body>
+</html>
